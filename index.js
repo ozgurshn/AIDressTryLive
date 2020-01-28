@@ -14,15 +14,15 @@
  * limitations under the License.
  * =============================================================================
  */
-import * as bodyPix from '@tensorflow-models/body-pix';
-import dat from 'dat.gui';
-import Stats from 'stats.js';
+// import * as bodyPix from '@tensorflow-models/body-pix';
+// import dat from 'dat.gui';
+// import Stats from 'stats.js';
 
-import {drawKeypoints, drawSkeleton, toggleLoadingUI, TRY_RESNET_BUTTON_NAME, TRY_RESNET_BUTTON_TEXT, updateTryResNetButtonDatGuiCss} from './demo_util';
-import * as partColorScales from './part_color_scales';
+//import {drawKeypoints, drawSkeleton, toggleLoadingUI, TRY_RESNET_BUTTON_NAME, TRY_RESNET_BUTTON_TEXT, updateTryResNetButtonDatGuiCss} from './demo_util';
+//import * as partColorScales from './part_color_scales';
 
 
-const stats = new Stats();
+//const stats = new Stats();
 
 const state = {
   video: null,
@@ -215,274 +215,7 @@ function toCameraOptions(cameras) {
 /**
  * Sets up dat.gui controller on the top-right of the window
  */
-function setupGui(cameras) {
-  const gui = new dat.GUI({width: 300});
 
-  let architectureController = null;
-  guiState[TRY_RESNET_BUTTON_NAME] = function() {
-    architectureController.setValue('ResNet50');
-  };
-  gui.add(guiState, TRY_RESNET_BUTTON_NAME).name(TRY_RESNET_BUTTON_TEXT);
-  updateTryResNetButtonDatGuiCss();
-
-  gui.add(guiState, 'camera', toCameraOptions(cameras))
-      .onChange(async function(cameraLabel) {
-        state.changingCamera = true;
-
-        await loadVideo(cameraLabel);
-
-        state.changingCamera = false;
-      });
-
-  gui.add(guiState, 'flipHorizontal');
-
-  // There are two algorithms 'person' and 'multi-person-instance'.
-  // The 'person' algorithm returns one single segmentation mask (or body
-  // part map) for all people in the image. The 'multi-person-instance'
-  // algorithm returns an array of segmentation mask (or body part map).
-  // Each element in the array corresponding to one of the people. In other
-  // words, 'multi-person-instance' algorithm does instance-level person
-  // segmentation and body part segmentation for every person in the image.
-  const algorithmController =
-      gui.add(guiState, 'algorithm', ['person', 'multi-person-instance']);
-
-  // Architecture: there are a few BodyPix models varying in size and
-  // accuracy.
-  // The input parameters have the most effect on accuracy and speed of the
-  // network
-  let input = gui.addFolder('Input');
-
-  // Updates outputStride
-  // Output stride:  Internally, this parameter affects the height and width
-  // of the layers in the neural network. The lower the value of the output
-  // stride the higher the accuracy but slower the speed, the higher the
-  // value the faster the speed but lower the accuracy.
-  let outputStrideController = null;
-  function updateGuiOutputStride(outputStride, outputStrideArray) {
-    if (outputStrideController) {
-      outputStrideController.remove();
-    }
-    guiState.input.outputStride = outputStride;
-    outputStrideController =
-        input.add(guiState.input, 'outputStride', outputStrideArray);
-    outputStrideController.onChange(function(outputStride) {
-      state.changingStride = true;
-      guiState.input.outputStride = +outputStride;
-    });
-  }
-
-  // Updates internal resolution
-  // Internal resolution:  Internally, this parameter affects the height and
-  // width of the layers in the neural network. The higher the value of the
-  // internal resolution the better the accuracy but slower the speed.
-  let internalResolutionController = null;
-  function updateGuiInternalResolution(
-      internalResolution,
-      internalResolutionArray,
-  ) {
-    if (internalResolutionController) {
-      internalResolutionController.remove();
-    }
-    guiState.input.internalResolution = internalResolution;
-    internalResolutionController = input.add(
-        guiState.input, 'internalResolution', internalResolutionArray);
-    internalResolutionController.onChange(function(internalResolution) {
-      guiState.input.internalResolution = internalResolution;
-    });
-  }
-
-  // Updates depth multiplier
-  // Multiplier: this parameter affects the number of feature map channels
-  // in the MobileNet. The higher the value, the higher the accuracy but
-  // slower the speed, the lower the value the faster the speed but lower
-  // the accuracy.
-  let multiplierController = null;
-  function updateGuiMultiplier(multiplier, multiplierArray) {
-    if (multiplierController) {
-      multiplierController.remove();
-    }
-    guiState.input.multiplier = multiplier;
-    multiplierController =
-        input.add(guiState.input, 'multiplier', multiplierArray);
-    multiplierController.onChange(function(multiplier) {
-      state.changingMultiplier = true;
-      guiState.input.multiplier = +multiplier;
-    });
-  }
-
-  // updates quantBytes
-  // QuantBytes: this parameter affects weight quantization in the ResNet50
-  // model. The available options are 1 byte, 2 bytes, and 4 bytes. The
-  // higher the value, the larger the model size and thus the longer the
-  // loading time, the lower the value, the shorter the loading time but
-  // lower the accuracy.
-  let quantBytesController = null;
-  function updateGuiQuantBytes(quantBytes, quantBytesArray) {
-    if (quantBytesController) {
-      quantBytesController.remove();
-    }
-    guiState.quantBytes = +quantBytes;
-    guiState.input.quantBytes = +quantBytes;
-    quantBytesController =
-        input.add(guiState.input, 'quantBytes', quantBytesArray);
-    quantBytesController.onChange(function(quantBytes) {
-      state.changingQuantBytes = true;
-      guiState.input.quantBytes = +quantBytes;
-    });
-  }
-
-  function updateGuiInputSection() {
-    if (guiState.input.architecture === 'MobileNetV1') {
-      updateGuiInternalResolution(
-          defaultMobileNetInternalResolution,
-          ['low', 'medium', 'high', 'full']);
-      updateGuiOutputStride(defaultMobileNetStride, [8, 16]);
-      updateGuiMultiplier(defaultMobileNetMultiplier, [0.50, 0.75, 1.0]);
-    } else { // guiState.input.architecture === "ResNet50"
-      updateGuiInternalResolution(
-          defaultResNetInternalResolution, ['low', 'medium', 'high', 'full']);
-      updateGuiOutputStride(defaultResNetStride, [32, 16]);
-      updateGuiMultiplier(defaultResNetMultiplier, [1.0]);
-    }
-    updateGuiQuantBytes(defaultQuantBytes, [1, 2, 4]);
-  }
-
-  // Architecture: there are a few PoseNet models varying in size and
-  // accuracy. 1.01 is the largest, but will be the slowest. 0.50 is the
-  // fastest, but least accurate.
-  architectureController =
-      input.add(guiState.input, 'architecture', ['ResNet50', 'MobileNetV1']);
-  guiState.architecture = guiState.input.architecture;
-  architectureController.onChange(function(architecture) {
-    // if architecture is ResNet50, then show ResNet50 options
-    state.changingArchitecture = true;
-    guiState.input.architecture = architecture;
-    updateGuiInputSection();
-  });
-
-  updateGuiInputSection();
-  input.open();
-
-  const estimateController =
-      gui.add(guiState, 'estimate', ['segmentation', 'partmap']);
-
-  let segmentation = gui.addFolder('Segmentation');
-  segmentation.add(guiState.segmentation, 'segmentationThreshold', 0.0, 1.0);
-  const segmentationEffectController =
-      segmentation.add(guiState.segmentation, 'effect', ['mask', 'bokeh']);
-
-  let multiPersonDecoding = gui.addFolder('MultiPersonDecoding');
-  multiPersonDecoding.add(
-      guiState.multiPersonDecoding, 'maxDetections', 0, 20, 1);
-  multiPersonDecoding.add(
-      guiState.multiPersonDecoding, 'scoreThreshold', 0.0, 1.0);
-  multiPersonDecoding.add(guiState.multiPersonDecoding, 'nmsRadius', 0, 30, 1);
-  multiPersonDecoding.add(
-      guiState.multiPersonDecoding, 'numKeypointForMatching', 1, 17, 1);
-  multiPersonDecoding.add(
-      guiState.multiPersonDecoding, 'refineSteps', 1, 10, 1);
-  multiPersonDecoding.open();
-
-  algorithmController.onChange(function(value) {
-    switch (guiState.algorithm) {
-      case 'single-person':
-        multiPersonDecoding.close();
-        singlePersonDecoding.open();
-        break;
-      case 'multi-person':
-        singlePersonDecoding.close();
-        multiPersonDecoding.open();
-        break;
-    }
-  });
-
-  let darknessLevel;
-  let bokehBlurAmount;
-  let edgeBlurAmount;
-  let maskBlurAmount;
-  let maskBackground;
-
-  segmentationEffectController.onChange(function(effectType) {
-    if (effectType === 'mask') {
-      if (bokehBlurAmount) {
-        bokehBlurAmount.remove();
-      }
-      if (edgeBlurAmount) {
-        edgeBlurAmount.remove();
-      }
-      darknessLevel =
-          segmentation.add(guiState.segmentation, 'opacity', 0.0, 1.0);
-      maskBlurAmount = segmentation.add(guiState.segmentation, 'maskBlurAmount')
-                           .min(0)
-                           .max(20)
-                           .step(1);
-      maskBackground =
-          segmentation.add(guiState.segmentation, 'maskBackground');
-    } else if (effectType === 'bokeh') {
-      if (darknessLevel) {
-        darknessLevel.remove();
-      }
-      if (maskBlurAmount) {
-        maskBlurAmount.remove();
-      }
-      if (maskBackground) {
-        maskBackground.remove();
-      }
-      bokehBlurAmount = segmentation
-                            .add(
-                                guiState.segmentation,
-                                'backgroundBlurAmount',
-                                )
-                            .min(1)
-                            .max(20)
-                            .step(1);
-      edgeBlurAmount = segmentation.add(guiState.segmentation, 'edgeBlurAmount')
-                           .min(0)
-                           .max(20)
-                           .step(1);
-    }
-  });
-
-  // manually set the effect so that the options are shown.
-  segmentationEffectController.setValue(guiState.segmentation.effect);
-
-  let partMap = gui.addFolder('Part Map');
-  partMap.add(guiState.partMap, 'segmentationThreshold', 0.0, 1.0);
-  partMap.add(
-      guiState.partMap, 'effect', ['partMap', 'pixelation', 'blurBodyPart']);
-  partMap.add(guiState.partMap, 'opacity', 0.0, 1.0);
-  partMap.add(guiState.partMap, 'colorScale', Object.keys(partColorScales))
-      .onChange((colorScale) => {
-        setShownPartColorScales(colorScale);
-      });
-  setShownPartColorScales(guiState.partMap.colorScale);
-  partMap.add(guiState.partMap, 'blurBodyPartAmount').min(1).max(20).step(1);
-  partMap.add(guiState.partMap, 'bodyPartEdgeBlurAmount')
-      .min(1)
-      .max(20)
-      .step(1);
-  partMap.open();
-
-  estimateController.onChange(function(estimationType) {
-    if (estimationType === 'segmentation') {
-      segmentation.open();
-      partMap.close();
-      document.getElementById('colors').style.display = 'none';
-    } else {
-      segmentation.close();
-      partMap.open();
-      document.getElementById('colors').style.display = 'inline-block';
-    }
-  });
-
-  gui.add(guiState, 'showFps').onChange((showFps) => {
-    if (showFps) {
-      document.body.appendChild(stats.dom);
-    } else {
-      document.body.removeChild(stats.dom);
-    }
-  });
-}
 
 function setShownPartColorScales(colorScale) {
   const colors = document.getElementById('colors');
@@ -507,12 +240,7 @@ function setShownPartColorScales(colorScale) {
 /**
  * Sets up a frames per second panel on the top-left of the window
  */
-function setupFPS() {
-  stats.showPanel(0); // 0: fps, 1: ms, 2: mb, 3+: custom
-  if (guiState.showFps) {
-    document.body.appendChild(stats.dom);
-  }
-}
+
 
 async function estimateSegmentation() {
   let multiPersonSegmentation = null;
@@ -592,14 +320,14 @@ function drawPoses(personOrPersonPartSegmentation, flipHorizontally, ctx) {
 }
 
 async function loadBodyPix() {
-  toggleLoadingUI(true);
+  // toggleLoadingUI(true);
   state.net = await bodyPix.load({
     architecture: guiState.input.architecture,
     outputStride: guiState.input.outputStride,
     multiplier: guiState.input.multiplier,
     quantBytes: guiState.input.quantBytes,
   });
-  toggleLoadingUI(false);
+  // toggleLoadingUI(false);
 }
 
 /**
@@ -625,7 +353,7 @@ function segmentBodyInRealTime() {
     }
 
     // Begin monitoring code for frames per second
-    stats.begin();
+    // stats.begin();
 
     const flipHorizontally = guiState.flipHorizontal;
 
@@ -714,7 +442,7 @@ function segmentBodyInRealTime() {
     }
 
     // End monitoring code for frames per second
-    stats.end();
+    //stats.end();
 
     requestAnimationFrame(bodySegmentationFrame);
   }
@@ -725,7 +453,7 @@ function segmentBodyInRealTime() {
 /**
  * Kicks off the demo.
  */
-export async function bindPage() {
+ async function bindPage() {
   // Load the BodyPix model weights with architecture 0.75
   await loadBodyPix();
   document.getElementById('loading').style.display = 'none';
@@ -735,7 +463,7 @@ export async function bindPage() {
 
   let cameras = await getVideoInputs();
 
-  setupFPS();
+ // setupFPS();
   //setupGui(cameras);
 
   segmentBodyInRealTime();
